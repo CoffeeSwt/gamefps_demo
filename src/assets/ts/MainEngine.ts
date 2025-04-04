@@ -6,9 +6,14 @@ import {
   OrthographicCamera,
   Scene,
   WebGLRenderer,
+  Raycaster,
+  Vector2,
+  Intersection,
+  Mesh,
+  Material,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
-
+import { TransformControls } from "three/examples/jsm/controls/TransformControls";
 export class MainEngine {
   dom: HTMLElement = document.body;
   renderer: WebGLRenderer = new WebGLRenderer({ antialias: true });
@@ -25,10 +30,13 @@ export class MainEngine {
   debugMode: boolean = false;
   private axesHelper: AxesHelper | null = null;
   private resizeObserver: ResizeObserver | null = null;
-
+  private raycaster: Raycaster = new Raycaster(); // 初始化 Raycaster
+  private mouse: Vector2 = new Vector2(); // 存储鼠标位置
+  private selectedObject: Object3D | null = null; // 保存鼠标指向的物体
+  sceneObjects: string[] = []; // 存储场景中的物体的 uuid
   init(dom: HTMLElement) {
     this.dom = dom;
-    this.scene.background = new Color(0x88ccee);
+    this.scene.background = new Color(0xcccccc);
 
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.resize();
@@ -43,6 +51,9 @@ export class MainEngine {
     // 初始化正交相机
     this.initOrthographicCamera();
 
+    // 添加鼠标事件监听
+    this.addMouseEventListeners();
+
     return this;
   }
 
@@ -52,10 +63,25 @@ export class MainEngine {
 
   addObject(object: Object3D) {
     this.scene.add(object);
+    this.sceneObjects.push(object.uuid); // 将物体的 uuid 添加到数组中
   }
 
   removeObject(object: any) {
     this.scene.remove(object);
+    const index = this.sceneObjects.indexOf(object.uuid); // 获取物体的 uuid 在数组中的索引
+    if (index !== -1) {
+      // 如果找到了索引
+      this.sceneObjects.splice(index, 1); // 从数组中移除物体的 uuid
+    }
+    if (object instanceof Mesh) {
+      // 如果是 Mesh 类型，销毁材质和几何体
+      object.geometry.dispose(); // 销毁几何体
+      if (object.material instanceof Array) {
+        object.material.forEach((mat) => mat.dispose()); // 销毁材质（如果是数组）
+      } else {
+        object.material.dispose(); // 销毁材质
+      }
+    }
   }
 
   setCameraPosition(x: number, y: number, z: number) {
@@ -74,8 +100,10 @@ export class MainEngine {
       if (this.controls) {
         this.controls.update(); // 更新 OrbitControls
       }
+      // console.log(this.scene.children);
       requestAnimationFrame(animate);
     };
+
     animate();
     return this;
   }
@@ -162,6 +190,7 @@ export class MainEngine {
         this.axesHelper = new AxesHelper(1000); // 创建一个长度为 1000 的坐标轴指示器
         this.scene.add(this.axesHelper); // 将坐标轴指示器添加到场景中
       }
+      // this.controls!.enabled = false; // 禁用 OrbitControls
     } else {
       // 如果关闭调试模式，移除并销毁坐标轴指示器
       if (this.axesHelper) {
@@ -174,6 +203,7 @@ export class MainEngine {
         }
         this.axesHelper = null; // 清空引用
       }
+      // this.controls!.enabled = true; // 启用 OrbitControls
     }
     return this;
   }
@@ -201,5 +231,43 @@ export class MainEngine {
     if (this.controls) {
       this.controls.enableRotate = true; // 启用旋转
     }
+  }
+
+  private addMouseEventListeners() {
+    this.dom.addEventListener("mousemove", this.onMouseMove.bind(this));
+    this.dom.addEventListener("click", this.onMouseClick.bind(this));
+  }
+
+  private onMouseMove(event: MouseEvent) {
+    // 将鼠标位置转换为归一化设备坐标 (NDC)
+    const rect = this.dom.getBoundingClientRect();
+    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    // 更新射线
+    this.raycaster.setFromCamera(this.mouse, this.activeCamera);
+
+    // 检测与场景中物体的交互
+    const intersects: Intersection[] = this.raycaster.intersectObjects(
+      this.scene.children,
+      true
+    );
+
+    if (intersects.length > 0) {
+      const intersectedObject = intersects[0].object; // 获取第一个交互的物体
+      // console.log("Mouse over object:", intersectedObject);
+      // 保存指向的物体
+      this.selectedObject = intersectedObject;
+    } else {
+      this.selectedObject = null; // 如果没有指向物体，清空
+    }
+  }
+
+  private onMouseClick(event: MouseEvent) {
+    if (!this.selectedObject) return;
+    if (!this.sceneObjects.includes(this.selectedObject.uuid)) return; // 确保选中的物体是 主动添加 类型
+    // 在这里可以对选中的物体执行操作
+    // 例如：this.selectedObject.material.color.set(0xff0000); // 将选中物体的颜色改为红色}
+    console.log("Mouse clicked on object:", this.selectedObject);
   }
 }
