@@ -2,11 +2,11 @@
     <div absolute top-0 left-0 w-screen h-screen overflow-hidden z-1 ref="canvasTarget">
 
     </div>
-    <div fixed top-20 left-20 w-50 h-30 shadow-2xl border-black border-solid z-10>
-        <div relative top-0 left-0 w-full v-show="isDebugMode">debugMode on</div>
-        <div relative top-0 left-0 w-full v-show="!isDebugMode">debugMode off</div>
+    <!-- <div fixed top-20 left-20 w-50 h-30 shadow-2xl border-black border-solid z-10> -->
+        <!-- <div relative top-0 left-0 w-full v-show="isDebugMode">debugMode on</div> -->
+        <!-- <div relative top-0 left-0 w-full v-show="!isDebugMode">debugMode off</div> -->
         <!-- <button relative @click.stop="toggleDebugMode">toggleDebugMode</button> -->
-    </div>
+    <!-- </div> -->
 
 </template>
 
