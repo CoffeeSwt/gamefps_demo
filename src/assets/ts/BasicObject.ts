@@ -24,4 +24,9 @@ export class BasicObject {
         const material = new THREE.MeshStandardMaterial({ color });
         return new THREE.Mesh(geometry, material);
     }
+    static createLine(points: THREE.Vector3[], color: number = 0xffffff): THREE.Line {
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const material = new THREE.LineBasicMaterial({ color });
+        return new THREE.Line(geometry, material);
+    }
 }

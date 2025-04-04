@@ -3,6 +3,7 @@ import {
   Color,
   Object3D,
   PerspectiveCamera,
+  OrthographicCamera,
   Scene,
   WebGLRenderer,
 } from "three";
@@ -12,17 +13,23 @@ export class MainEngine {
   dom: HTMLElement = document.body;
   renderer: WebGLRenderer = new WebGLRenderer({ antialias: true });
   scene: Scene = new Scene();
-  camera: PerspectiveCamera = new PerspectiveCamera(70, 1, 0.1, 1000);
-  controls: OrbitControls | null = null; // 添加 OrbitControls
+  perspectiveCamera: PerspectiveCamera = new PerspectiveCamera(
+    70,
+    1,
+    0.1,
+    1000
+  );
+  orthographicCamera: OrthographicCamera | null = null; // 添加正交相机
+  activeCamera: PerspectiveCamera | OrthographicCamera = this.perspectiveCamera; // 当前激活的相机
+  controls: OrbitControls | null = null;
   debugMode: boolean = false;
+  private axesHelper: AxesHelper | null = null;
   private resizeObserver: ResizeObserver | null = null;
 
-  constructor(dom: HTMLElement) {
+  init(dom: HTMLElement) {
     this.dom = dom;
     this.scene.background = new Color(0x88ccee);
 
-    this.camera.position.set(20, 20, 20);
-    this.camera.lookAt(0, 0, 0);
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.resize();
     this.dom.appendChild(this.renderer.domElement);
@@ -32,10 +39,15 @@ export class MainEngine {
 
     // 初始化 ResizeObserver
     this.initResizeObserver();
+
+    // 初始化正交相机
+    this.initOrthographicCamera();
+
+    return this;
   }
 
   render() {
-    this.renderer.render(this.scene, this.camera);
+    this.renderer.render(this.scene, this.activeCamera); // 使用当前激活的相机渲染
   }
 
   addObject(object: Object3D) {
@@ -47,11 +59,13 @@ export class MainEngine {
   }
 
   setCameraPosition(x: number, y: number, z: number) {
-    this.camera.position.set(x, y, z);
+    this.perspectiveCamera.position.set(x, y, z);
+    this.orthographicCamera?.position.set(x, y, z); // 使用可选链操作符来处理可能为 null 的情况
   }
 
   lookAt(x: number, y: number, z: number) {
-    this.camera.lookAt(x, y, z);
+    this.perspectiveCamera.lookAt(x, y, z);
+    this.orthographicCamera?.lookAt(x, y, z);
   }
 
   start() {
@@ -63,58 +77,129 @@ export class MainEngine {
       requestAnimationFrame(animate);
     };
     animate();
+    return this;
   }
 
-  resize() {
-    this.camera.aspect = this.dom.offsetWidth / this.dom.offsetHeight;
-    this.camera.updateProjectionMatrix();
+  private resize() {
+    const aspect = this.dom.offsetWidth / this.dom.offsetHeight;
+
+    // 更新透视相机
+    this.perspectiveCamera.aspect = aspect;
+    this.perspectiveCamera.updateProjectionMatrix();
+
+    // 更新正交相机
+    if (this.orthographicCamera) {
+      const frustumSize = 10;
+      this.orthographicCamera.left = (-frustumSize * aspect) / 2;
+      this.orthographicCamera.right = (frustumSize * aspect) / 2;
+      this.orthographicCamera.top = frustumSize / 2;
+      this.orthographicCamera.bottom = -frustumSize / 2;
+      this.orthographicCamera.updateProjectionMatrix();
+    }
+
     this.renderer.setSize(this.dom.offsetWidth, this.dom.offsetHeight);
+    return this;
   }
 
   private initControls() {
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true; // 启用阻尼效果（惯性）
-    this.controls.dampingFactor = 0.05; // 阻尼系数
-    this.controls.screenSpacePanning = false; // 禁止屏幕空间平移
-    this.controls.minDistance = 5; // 最小缩放距离
-    this.controls.maxDistance = 100; // 最大缩放距离
-    this.controls.maxPolarAngle = Math.PI / 2; // 限制垂直旋转角度（避免翻转）
-  }
-
-  private addAxesHelper(length: number = 5) {
-    const axesHelper = new AxesHelper(length); // 创建一个长坐标轴指示器
-    this.scene.add(axesHelper); // 将坐标轴指示器添加到场景中
+    this.controls = new OrbitControls(
+      this.activeCamera,
+      this.renderer.domElement
+    );
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.05;
+    this.controls.screenSpacePanning = false;
+    this.controls.minDistance = 5;
+    this.controls.maxDistance = 100;
+    this.controls.maxPolarAngle = Math.PI / 2;
   }
 
   private initResizeObserver() {
     this.resizeObserver = new ResizeObserver(() => {
-      this.resize(); // 调用 resize 方法更新相机和渲染器
+      this.resize();
     });
-    this.resizeObserver.observe(this.dom); // 监听 DOM 元素大小变化
+    this.resizeObserver.observe(this.dom);
   }
 
-  changeDebugMode(debugMode: boolean) {
-    this.debugMode = debugMode; // 更新 debugMode 属性
-    if (debugMode) {
-      // 添加坐标轴指示器
-      this.addAxesHelper(1000);
+  private initOrthographicCamera() {
+    const aspect = this.dom.offsetWidth / this.dom.offsetHeight;
+    const frustumSize = 10;
+    this.orthographicCamera = new OrthographicCamera(
+      (-frustumSize * aspect) / 2,
+      (frustumSize * aspect) / 2,
+      frustumSize / 2,
+      -frustumSize / 2,
+      0.1,
+      1000
+    );
+    this.orthographicCamera.position.set(20, 20, 20);
+    this.orthographicCamera.lookAt(0, 0, 0);
+  }
+
+  changeCamera(type: "perspective" | "orthographic") {
+    if (type === "perspective") {
+      this.activeCamera = this.perspectiveCamera;
+    } else if (type === "orthographic" && this.orthographicCamera) {
+      this.activeCamera = this.orthographicCamera;
     }
+
+    // 更新 OrbitControls 绑定的相机
+    if (this.controls) {
+      this.controls.object = this.activeCamera;
+
+      // 同步 OrbitControls 的目标点
+      const target = this.controls.target.clone(); // 保存当前目标点
+      this.controls.target.copy(target); // 将目标点同步到新相机
+      this.controls.update(); // 更新 OrbitControls
+    }
+  }
+  changeDebugMode() {
+    this.debugMode = !this.debugMode; // 更新 debugMode 属性
+
+    if (this.debugMode) {
+      // 如果开启调试模式，添加坐标轴指示器
+      if (!this.axesHelper) {
+        this.axesHelper = new AxesHelper(1000); // 创建一个长度为 1000 的坐标轴指示器
+        this.scene.add(this.axesHelper); // 将坐标轴指示器添加到场景中
+      }
+    } else {
+      // 如果关闭调试模式，移除并销毁坐标轴指示器
+      if (this.axesHelper) {
+        this.scene.remove(this.axesHelper); // 从场景中移除
+        this.axesHelper.geometry.dispose(); // 销毁几何体
+        if (this.axesHelper.material instanceof Array) {
+          this.axesHelper.material.forEach((mat) => mat.dispose()); // 销毁材质（如果是数组）
+        } else {
+          this.axesHelper.material.dispose(); // 销毁材质
+        }
+        this.axesHelper = null; // 清空引用
+      }
+    }
+    return this;
   }
 
   stop() {
-    // 停止渲染循环
     if (this.controls) {
-      this.controls.dispose(); // 清理 OrbitControls
+      this.controls.dispose();
       this.controls = null;
     }
     this.dispose();
   }
 
-  dispose() {
-    // 停止监听 ResizeObserver
+  private dispose() {
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
+    }
+  }
+  disableRotation() {
+    if (this.controls) {
+      this.controls.enableRotate = false; // 禁用旋转
+    }
+  }
+  enableRotation() {
+    if (this.controls) {
+      this.controls.enableRotate = true; // 启用旋转
     }
   }
 }
